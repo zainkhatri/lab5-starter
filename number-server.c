@@ -1,40 +1,48 @@
-#include "http-server.h"
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include "http-server.h"
 
-int num = 0;
+int num = 0;  // Global variable to store the current number
 
-char const HTTP_404_NOT_FOUND[] = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\n";
-
-void handle_404(int client_sock, char *path)  {
-    printf("SERVER LOG: Got request for unrecognized path \"%s\"\n", path);
-
-    char response_buff[BUFFER_SIZE];
-    snprintf(response_buff, BUFFER_SIZE, "Error 404:\r\nUnrecognized path \"%s\"\r\n", path);
-    // snprintf includes a null-terminator
-
-    // TODO: send response back to client?
-}
-
-
-void handle_response(char *request, int client_sock) {
-    char path[256];
-
-    printf("\nSERVER LOG: Got request: \"%s\"\n", request);
-
-    // Parse the path out of the request line (limit buffer size; sscanf null-terminates)
-    if (sscanf(request, "GET %255s", path) != 1) {
-        printf("Invalid request line\n");
+void handle_response(char *path, int client_sock) {
+    if (strcmp(path, "/shownum") == 0) {
+        // Respond with the current number value
+        char response[128];
+        snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nYour number is %d", num);
+        write(client_sock, response, strlen(response));
         return;
     }
 
-    handle_404(client_sock, path);
-}
-
-int main(int argc, char *argv[]) {
-    int port = 0;
-    if(argc >= 2) { // if called with a port number, use that
-        port = atoi(argv[1]);
+    if (strcmp(path, "/increment") == 0) {
+        // Increment the number by 1
+        num += 1;
+        char response[128];
+        snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nYour number is %d", num);
+        write(client_sock, response, strlen(response));
+        return;
     }
 
-    start_server(&handle_response, port);
+    if (strstr(path, "/add?value=") == path) {
+        // Parse the value from the URL and add it to the number
+        int value_to_add = 0;
+        sscanf(path, "/add?value=%d", &value_to_add);
+        num += value_to_add;
+
+        char response[128];
+        snprintf(response, sizeof(response), "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nYour number is %d", num);
+        write(client_sock, response, strlen(response));
+        return;
+    }
+
+    // Handle 404 for unsupported paths
+    char response[128];
+    snprintf(response, sizeof(response), "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nPath not found: %s", path);
+    write(client_sock, response, strlen(response));
+}
+
+int main() {
+    // Start the server on a random available port
+    start_server(handle_response, 0);
+    return 0;
 }
